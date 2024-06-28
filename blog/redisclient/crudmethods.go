@@ -1,8 +1,7 @@
-package main
+package redisclient
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	pb "github.com/btwseeu78/blog/blog/proto"
 	"github.com/go-redis/redis/v8"
@@ -39,29 +38,7 @@ func (b *BlogClient) CheckConnection() (pong bool, err error) {
 	return success == "PONG", nil
 }
 
-func (b *BlogClient) ListData(key string) ([]*pb.Blog, error) {
-	//searchKey := fmt.Sprintf("blog:%v", key)
-	list, err := b.redisClient.LRange(context.Background(), "blog", 0, -1).Result()
-	if err != nil {
-		fmt.Println(err)
-	}
-	if err == redis.Nil {
-		return nil, errors.New("key not found")
-	}
-	var listBlogs []*pb.Blog
-	for _, blog := range list {
-		var temp pb.Blog
-		err := proto.Unmarshal([]byte(blog), &temp)
-		if err != nil {
-			fmt.Println(err)
-			return nil, err
-		}
-		listBlogs = append(listBlogs, &temp)
-
-	}
-	return listBlogs, nil
-}
-func (b *BlogClient) GetData(key string) *pb.Blog {
+func (b *BlogClient) GetData(key int64) *pb.Blog {
 	searchKey := fmt.Sprintf("blog:%v", key)
 	val, err := b.redisClient.Get(context.Background(), searchKey).Result()
 	if err != nil {
@@ -85,15 +62,24 @@ func (b *BlogClient) DeleteData(key string) error {
 	}
 	return nil
 }
-func (b *BlogClient) SetData(blog *pb.Blog) error {
+func (b *BlogClient) SetData(blog *pb.Blog) (out *pb.BlogId, err error) {
+	fmt.Println("NewBlogCalled")
+	newId, err := b.redisClient.Incr(context.Background(), "blog").Result()
+	fmt.Println("newId:", newId)
+	if err != nil {
+		fmt.Println("redis unable to set value, err:", err)
+	}
 	data, err := proto.Marshal(blog)
 	if err != nil {
 		fmt.Printf("Marshal err: %v\n", err)
 	}
-	key := fmt.Sprintf("blog:%v", blog.Id)
+	key := fmt.Sprintf("blog:%v", newId)
 	err = b.redisClient.Set(context.Background(), key, data, 0).Err()
 	if err != nil {
-		return err
+		return
 	}
-	return nil
+	return &pb.BlogId{
+		Id: key,
+	}, nil
+
 }
